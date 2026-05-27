@@ -96,6 +96,53 @@
   }
   #next-btn:hover { transform:translateY(-2px); box-shadow:0 6px 18px rgba(61,220,107,0.5); }
   #next-btn:active { transform:translateY(0); }
+  #btn-row {
+    display:flex; gap:10px; align-items:center; margin-top:7px;
+  }
+  #restart-btn {
+    background:rgba(0,0,0,0.35); border:1.5px solid rgba(255,255,255,0.18);
+    border-radius:12px; color:rgba(255,255,255,0.7); font-family:'Fredoka One',cursive;
+    font-size:clamp(0.7rem,2.5vw,0.92rem); padding:7px 16px; cursor:pointer;
+    transition:transform 0.1s, background 0.15s, color 0.15s;
+  }
+  #restart-btn:hover { background:rgba(220,60,60,0.35); color:#fff; border-color:rgba(220,100,100,0.5); }
+  #restart-btn:active { transform:scale(0.96); }
+  /* Confirmation modal */
+  #confirm-overlay {
+    display:none; position:fixed; inset:0; z-index:100;
+    background:rgba(0,0,0,0.65); backdrop-filter:blur(3px);
+    align-items:center; justify-content:center;
+  }
+  #confirm-overlay.show { display:flex; }
+  #confirm-box {
+    background:linear-gradient(160deg,#0e2e1a,#1a4a2e);
+    border:2px solid rgba(126,255,160,0.25); border-radius:20px;
+    padding:28px 32px; text-align:center; max-width:320px; width:90%;
+    box-shadow:0 12px 50px rgba(0,0,0,0.7);
+  }
+  #confirm-box h2 {
+    font-family:'Fredoka One',cursive; color:#fff;
+    font-size:clamp(1.1rem,4vw,1.5rem); margin-bottom:8px;
+  }
+  #confirm-box p {
+    color:rgba(255,255,255,0.6); font-size:clamp(0.72rem,2.5vw,0.88rem);
+    margin-bottom:22px; line-height:1.5;
+  }
+  #confirm-box .btn-group { display:flex; gap:10px; justify-content:center; }
+  #confirm-yes {
+    background:linear-gradient(135deg,#dc3c3c,#a82020); border:none;
+    border-radius:10px; color:#fff; font-family:'Fredoka One',cursive;
+    font-size:clamp(0.8rem,3vw,1rem); padding:8px 22px; cursor:pointer;
+    box-shadow:0 4px 14px rgba(220,60,60,0.4); transition:transform 0.1s;
+  }
+  #confirm-yes:hover { transform:translateY(-2px); }
+  #confirm-no {
+    background:rgba(255,255,255,0.1); border:1.5px solid rgba(255,255,255,0.2);
+    border-radius:10px; color:#fff; font-family:'Fredoka One',cursive;
+    font-size:clamp(0.8rem,3vw,1rem); padding:8px 22px; cursor:pointer;
+    transition:transform 0.1s, background 0.15s;
+  }
+  #confirm-no:hover { background:rgba(255,255,255,0.18); transform:translateY(-2px); }
 </style>
 </head>
 <body>
@@ -116,7 +163,22 @@
     <div id="pad-thumb"></div>
     <div id="pad-hint">DRAG OPPOSITE to aim &amp; shoot<br>&larr; further = more power &rarr;</div>
   </div>
-  <button id="next-btn">Next Hole &rarr;</button>
+  <div id="btn-row">
+    <button id="next-btn">Next Hole &rarr;</button>
+    <button id="restart-btn">&#8635; Restart</button>
+  </div>
+</div>
+
+<!-- Confirmation modal -->
+<div id="confirm-overlay">
+  <div id="confirm-box">
+    <h2>&#9971; Restart Game?</h2>
+    <p>Your progress will be lost and you'll start back at hole 1.</p>
+    <div class="btn-group">
+      <button id="confirm-yes">Yes, restart</button>
+      <button id="confirm-no">Keep playing</button>
+    </div>
+  </div>
 </div>
 <script>
 const GW=480, GH=360;
@@ -136,6 +198,10 @@ const MAX_POWER = 14;
 const HOLE_R    = 13;
 const SINK_SPEED = 4.5;
 let ball = {x:0, y:0, vx:0, vy:0, r:9};
+const SAVE_KEY = 'gengolf_save';
+function saveProgress(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify({holeIdx, totalScore})); }catch(e){} }
+function loadProgress(){ try{ const d=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); if(d&&typeof d.holeIdx==='number'){ return d; } }catch(e){} return null; }
+function clearProgress(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
 let holeIdx=0, totalScore=0, shots=0;
 let waterFlash=0, waterAnim=0;
 let currentHole = null;
@@ -688,6 +754,7 @@ function tick(){
 function onSunk(){
   const par=currentHole.par, diff=shots-par;
   totalScore+=diff;
+  saveProgress();
   const sc=totalScore;
   document.getElementById('total-score').textContent=sc>0?('+'+sc):sc;
   const label =
@@ -710,11 +777,27 @@ function hideMsg(){
   el.classList.remove('show');
   el.innerHTML='';
 }
-function advanceHole(){ holeIdx++; hideMsg(); loadHole(holeIdx); }
+function advanceHole(){ holeIdx++; hideMsg(); loadHole(holeIdx); saveProgress(); }
 document.getElementById('next-btn').addEventListener('click', advanceHole);
 
+/* ---- restart ---- */
+const confirmOverlay = document.getElementById('confirm-overlay');
+document.getElementById('restart-btn').addEventListener('click', ()=>{ confirmOverlay.classList.add('show'); });
+document.getElementById('confirm-no').addEventListener('click',  ()=>{ confirmOverlay.classList.remove('show'); });
+document.getElementById('confirm-yes').addEventListener('click', ()=>{
+  confirmOverlay.classList.remove('show');
+  holeIdx=0; totalScore=0;
+  clearProgress();
+  hideMsg();
+  loadHole(0);
+});
+confirmOverlay.addEventListener('click', e=>{ if(e.target===confirmOverlay) confirmOverlay.classList.remove('show'); });
+
+/* ---- init: restore or start fresh ---- */
 resize();
-loadHole(0);
+const saved = loadProgress();
+if(saved){ holeIdx=saved.holeIdx; totalScore=saved.totalScore; }
+loadHole(holeIdx);
 tick();
 </script>
 </body>
